@@ -1,12 +1,12 @@
 [
-  {
-    "site": "https://minio1.sedimark.work:9000",
-    "token": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9tZXRoZXVzIiwic3ViIjoic3VwZXIiLCJleHAiOjQ4NDY0NzE1Mzh9.UrPgoKiZpRcgcZMvEdxUjyV_9mJkOayjydxgaaYUlE-wkJvGCbR1JJefGMQBQFu6gX3U41OBcP0r7ZGyhuGHgQ",
-    "alias": "minio1"
-  },
-  {
-    "site": "https://minio2.sedimark.work:9000",
-    "token": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9tZXRoZXVzIiwic3ViIjoic3VwZXIiLCJleHAiOjQ4NDY1NTYyNDh9.O2wKDq1he75Gs7dfhETgRnvA94Dgwn564pJxf_qrgEKg41lxvjxI0Ox_wXyeHBBP8cLJ2D4NGk2XveD9OUZf3Q",
-    "alias": "minio2"
-  }
+    {
+        "site": "https://minio1.sedimark.work:9000",
+        "token": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9tZXRoZXVzIiwic3ViIjoic3VwZXIiLCJleHAiOjQ4NDY0NzE1Mzh9.UrPgoKiZpRcgcZMvEdxUjyV_9mJkOayjydxgaaYUlE-wkJvGCbR1JJefGMQBQFu6gX3U41OBcP0r7ZGyhuGHgQ",
+        "alias": "minio1"
+    },
+    {
+        "site": "https://minio2.sedimark.work:9000",
+        "token": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9tZXRoZXVzIiwic3ViIjoic3VwZXIiLCJleHAiOjQ4NDY1NTYyNDh9.O2wKDq1he75Gs7dfhETgRnvA94Dgwn564pJxf_qrgEKg41lxvjxI0Ox_wXyeHBBP8cLJ2D4NGk2XveD9OUZf3Q",
+        "alias": "minio2"
+    }
 ]

@@ -8,3 +8,8 @@ class Servers(BaseModel):
 
 class Tags(BaseModel):
     tags: Dict[str, str]
+
+
+class Instance(BaseModel):
+    url: str
+    token: str

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from fastapi import FastAPI, status, UploadFile, Form, File
 from fastapi.responses import JSONResponse
 from load_balancer import MinIO
-from models import Servers, Tags
+from models import Servers, Tags, Instance
 
 tags_metadata = [
     {
@@ -19,9 +19,15 @@ tags_metadata = [
                        "the Prometheus metrics page."
     },
     {
-        "name": "add_instance",
+        "name": "add_instances",
         "description": "This methode is used to add more instances of Minio to the load balancer. The "
                        "methode receives, as a body, a dictionary of Minio servers URLs and the token for "
+                       "the Prometheus metrics page."
+    },
+    {
+        "name": "add_instance",
+        "description": "This methode is used to add more instances of Minio to the load balancer. The "
+                       "methode receives, as a body, the URL for the Minio instance and the token for "
                        "the Prometheus metrics page."
     },
     {
@@ -67,28 +73,39 @@ def init():
                 os.system('chmod +x $HOME/minio-binaries/mc')
 
 
-@app.post("/create_instance/", status_code=201, tags=["create_instance"])
-async def create_instance(servers: Servers):
+@app.post("/add_instances/", status_code=201, tags=["add_instances"])
+async def add_instances(servers: Servers):
     if len(servers.servers) > 0:
         global minio_instance
-        minio_instance = MinIO(servers.servers)
-        return {"message": "Instance created successfully!"}
+        if isinstance(minio_instance, MinIO):
+            result = minio_instance.add_instances(servers.servers)
+            if len(result) == 0:
+                return {"message": "Added instances successfully!"}
+            else:
+                message = ", ".join(result)
+                return JSONResponse(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content=f'Error adding instances: {message}'
+                )
+        else:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance '
+                                                                                  'at /create_instance/')
     else:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="Servers could not be empty")
 
 
 @app.post("/add_instance/", status_code=201, tags=["add_instance"])
-async def add_instance(servers: Servers):
-    if len(servers.servers) > 0:
+async def add_instance(instance: Instance):
+    if len(instance.url) > 0 and len(instance.token) > 0:
         global minio_instance
         if isinstance(minio_instance, MinIO):
-            result = minio_instance.add_instances(servers.servers)
-            if result:
+            result = minio_instance.add_instances({instance.url: instance.token})
+            if len(result) == 0:
                 return {"message": "Added instance successfully!"}
             else:
                 return JSONResponse(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content='Error adding the instance'
+                    content='Error when trying to add the instance'
                 )
         else:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance '
@@ -131,7 +148,7 @@ async def put_object(file: Annotated[bytes, File()], file_name: Annotated[str, F
 
 
 @app.put("/upload_object/", status_code=201, tags=["put_object"])
-async def put_object(file: UploadFile, tags: Optional[str] = Form(None)):
+async def upload_object(file: UploadFile, tags: Optional[str] = Form(None)):
     global minio_instance
     tags = json.loads(tags) if tags is not None else json.loads('{}')
     if isinstance(minio_instance, MinIO):
@@ -151,5 +168,7 @@ async def put_object(file: UploadFile, tags: Optional[str] = Form(None)):
 
 if __name__ == '__main__':
     init()
+
+    minio_instance = MinIO()
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
