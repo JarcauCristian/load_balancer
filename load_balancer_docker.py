@@ -14,12 +14,37 @@ from typing import List, Dict, Any
 
 class MinIO:
 
-    def __init__(self, sites: Dict[str, str]):
+    def __init__(self):
         self.aliases = {}
         self.clients = {}
         self.tokens = {}
         self.current_index = 1
 
+        with open('/app/data/config.json', 'r') as json_in:
+            config: List[Dict[str, str]] = json.loads(json_in.read())
+
+        self.current_index = int(config[-1]['alias'].split('o')[-1]) + 1
+
+        for instance in config:
+            client = Minio(f'{instance["site"].split(":")[1][2:]}:{instance["site"].split(":")[2]}',
+                           access_key='super',
+                           secret_key='doopersecret'
+                           )
+            self.clients[instance['site']] = client
+            self.aliases[instance['site']] = instance['alias']
+            self.tokens[instance['site']] = instance['token']
+
+            result = os.system('mc alias set minio{} {} super doopersecret'.format(
+                instance['alias'].split('o')[-1], instance['site']))
+
+            if result == 0:
+                print('Added successfully!')
+
+    def add_instances(self, sites: Dict[str, str]) -> List[str]:
+        with open('/app/data/config.json', 'r') as json_in:
+            config: List[Dict[str, str]] = json.loads(json_in.read())
+
+        errors = []
         for site, token in sites.items():
             client = Minio(f'{site.split(":")[1][2:]}:{site.split(":")[2]}',
                            access_key='super',
@@ -28,31 +53,20 @@ class MinIO:
             self.clients[site] = client
             self.aliases[site] = f'minio{self.current_index}'
             self.tokens[site] = token
-
+            instance = {'site': site, 'token': token, 'alias': f'minio{self.current_index}'}
             result = os.system('mc alias set minio{} {} super doopersecret'.format(
                 self.current_index, site))
             if result != 0:
-                print('An error appeared when trying to set the alias for {}, retrying...'.format(site))
+                errors.append(site)
+            else:
+                config.append(instance)
 
             self.current_index += 1
 
-    def add_instances(self, sites: Dict[str, str]) -> bool:
-        for site, token in sites.items():
-            client = Minio(f'{site.split(":")[1][2:]}:{site.split(":")[2]}',
-                           access_key='super',
-                           secret_key='doopersecret'
-                           )
-            self.clients[site] = client
-            self.aliases[site] = f'minio{self.current_index}'
-            self.tokens[site] = token
-            result = os.system('mc alias set minio{} {} super doopersecret'.format(
-                self.current_index, site))
-            if result != 0:
-                print('An error appeared when trying to set the alias for {}, retrying...'.format(site))
+        with open('/app/data/config.json', 'w') as json_out:
+            json_out.write(json.dumps(config, indent=4))
 
-            self.current_index += 1
-
-        return True
+        return errors
 
     def __health(self) -> Dict[str, str]:
         healthy = {}
@@ -94,7 +108,47 @@ class MinIO:
 
         return found
 
-    def put_object(self, file: fastapi.UploadFile, tags: Dict[str, str]):
+    def put_object(self, file: (bytes, str), file_size: int, tags: Dict[str, str]) -> (str, str):
+        healthy = self.__health()
+
+        pool = ThreadPool(processes=10)
+
+        async_results = []
+        for k, v in healthy.items():
+            async_result = pool.apply_async(self.__get_total_bytes, ((k, v), file_size))
+            async_results.append(async_result)
+
+        found = []
+        for async_result in async_results:
+            results = async_result.get()
+            if results is not None:
+                found.append(results)
+
+        max_dict = max(found, key=lambda d: max(d.values()))
+
+        max_key = max(max_dict, key=max_dict.get)
+
+        client = self.clients[max_key]
+
+        object_tags = self.__create_tags(tags)
+
+        result = client.put_object(
+            'dataspace',
+            file[1],
+            io.BytesIO(file[0]),
+            -1,
+            'application/json',
+            part_size=1024*1024*5,
+            tags=object_tags
+        )
+
+        pool.close()
+        pool.join()
+
+        if result is not None:
+            return result.bucket_name + '/' + result.object_name, max_key
+
+    def upload_object(self, file: fastapi.UploadFile, tags: Dict[str, str]) -> (str, str):
         healthy = self.__health()
         file_size = file.size
 
@@ -135,12 +189,12 @@ class MinIO:
             return result.bucket_name + '/' + result.object_name, max_key
 
     @staticmethod
-    def __search(health: tuple, tags) -> Dict[Any, List[str]]:
+    def __search(health: tuple, tags: Dict[str, str]) -> Dict[Any, List[str]]:
         search_string = f'mc find {health[1]} {"".join(tags)}'
         data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
         return None if len(data) == 0 else {health[0]: data}
 
-    def __get_total_bytes(self, health, file_size):
+    def __get_total_bytes(self, health: (str, str), file_size: int) -> Dict[str, float]:
         token = self.tokens[health[0]]
 
         headers = {'Authorization': f'Bearer {token}'}
@@ -156,6 +210,8 @@ class MinIO:
             result = ''.join(matches)
             total_size = float(result)
             return {health[0]: total_size - file_size}
+        else:
+            return {health[0]: 0}
 
     @staticmethod
     def __create_tags(tags: Dict[str, str]) -> Tags:

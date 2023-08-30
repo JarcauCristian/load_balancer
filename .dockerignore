@@ -1,7 +1,8 @@
 /venv
-/tokens
 load_balancer.py
 mc.exe
 *ignore*
 .idea
 __pycache__
+docker-compose.yaml
+/configs
