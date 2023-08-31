@@ -98,7 +98,12 @@ async def add_instance(instance: Instance):
     if len(instance.url) > 0 and len(instance.token) > 0:
         global minio_instance
         if isinstance(minio_instance, MinIO):
-            result = minio_instance.add_instances({instance.url: instance.token})
+            result = minio_instance.add_instances([{
+                'url': instance.url,
+                'token': instance.token,
+                'access_key': instance.access_key,
+                'secret_key': instance.secret_key
+            }])
             if len(result) == 0:
                 return {"message": "Added instance successfully!"}
             else:

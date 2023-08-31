@@ -4,6 +4,7 @@ from multiprocessing.pool import ThreadPool
 import subprocess
 import json
 import os
+import base64
 
 import fastapi
 import requests
@@ -26,38 +27,46 @@ class MinIO:
         self.current_index = int(config[-1]['alias'].split('o')[-1]) + 1
 
         for instance in config:
+            access_key = base64.b64decode(instance['access_key'].encode('utf-8')).decode('utf-8')
+            secret_key = base64.b64decode(instance['secret_key'].encode('utf-8')).decode('utf-8')
             client = Minio(f'{instance["site"].split(":")[1][2:]}:{instance["site"].split(":")[2]}',
-                           access_key='super',
-                           secret_key='doopersecret'
+                           access_key=access_key,
+                           secret_key=secret_key
                            )
             self.clients[instance['site']] = client
             self.aliases[instance['site']] = instance['alias']
             self.tokens[instance['site']] = instance['token']
 
-            result = os.system('mc.exe alias set minio{} {} super doopersecret'.format(
-                instance['alias'].split('o')[-1], instance['site']))
+            result = os.system('mc.exe alias set minio{} {} {} {}'.format(
+                instance['alias'].split('o')[-1], instance['site'], access_key, secret_key))
 
             if result == 0:
                 print('Added successfully!')
 
-    def add_instances(self, sites: Dict[str, str]) -> List[str]:
+    def add_instances(self, sites: List[Dict[str, str]]) -> List[str]:
         with open('./configs/config.json', 'r') as json_in:
             config: List[Dict[str, str]] = json.loads(json_in.read())
 
         errors = []
-        for site, token in sites.items():
-            client = Minio(f'{site.split(":")[1][2:]}:{site.split(":")[2]}',
-                           access_key='super',
-                           secret_key='doopersecret'
+        for site in sites:
+            client = Minio(f'{site["url"].split(":")[1][2:]}:{site["url"].split(":")[2]}',
+                           access_key=site['access_key'],
+                           secret_key=site['secret_key']
                            )
-            self.clients[site] = client
-            self.aliases[site] = f'minio{self.current_index}'
-            self.tokens[site] = token
-            instance = {'site': site, 'token': token, 'alias': f'minio{self.current_index}'}
-            result = os.system('mc.exe alias set minio{} {} super doopersecret'.format(
-                self.current_index, site))
+            self.clients[site['url']] = client
+            self.aliases[site['url']] = f'minio{self.current_index}'
+            self.tokens[site['url']] = site['token']
+            instance = {
+                'site': site['url'],
+                'token': site['token'],
+                'alias': f'minio{self.current_index}',
+                'access_key': base64.b64encode(site['access_key'].encode('utf-8')).decode('utf-8'),
+                'secret_key': base64.b64encode(site['secret_key'].encode('utf-8')).decode('utf-8')
+            }
+            result = os.system('mc.exe alias set minio{} {} {} {}'.format(
+                self.current_index, site['url'], site['access_key'], site['secret_key']))
             if result != 0:
-                errors.append(site)
+                errors.append(site['url'])
             else:
                 config.append(instance)
 
