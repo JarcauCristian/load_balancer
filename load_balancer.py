@@ -20,7 +20,7 @@ class MinIO:
         self.tokens = {}
         self.current_index = 1
 
-        with open('config.json', 'r') as json_in:
+        with open('./configs/config.json', 'r') as json_in:
             config: List[Dict[str, str]] = json.loads(json_in.read())
 
         self.current_index = int(config[-1]['alias'].split('o')[-1]) + 1
@@ -35,13 +35,13 @@ class MinIO:
             self.tokens[instance['site']] = instance['token']
 
             result = os.system('mc.exe alias set minio{} {} super doopersecret'.format(
-                config[-1]['alias'].split('o')[-1], instance['site']))
+                instance['alias'].split('o')[-1], instance['site']))
 
             if result == 0:
                 print('Added successfully!')
 
     def add_instances(self, sites: Dict[str, str]) -> List[str]:
-        with open('config.json', 'r') as json_in:
+        with open('./configs/config.json', 'r') as json_in:
             config: List[Dict[str, str]] = json.loads(json_in.read())
 
         errors = []
@@ -63,7 +63,7 @@ class MinIO:
 
             self.current_index += 1
 
-        with open('config.json', 'w') as json_out:
+        with open('./configs/config.json', 'w') as json_out:
             json_out.write(json.dumps(config, indent=4))
 
         return errors
