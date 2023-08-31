@@ -8,7 +8,7 @@ import uvicorn
 from tqdm import tqdm
 from fastapi import FastAPI, status, UploadFile, Form, File
 from fastapi.responses import JSONResponse
-from load_balancer_docker import MinIO
+from load_balancer import MinIO
 from models import Servers, Tags, Instance
 
 tags_metadata = [
