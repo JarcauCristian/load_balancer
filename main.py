@@ -13,12 +13,6 @@ from models import Servers, Tags, Instance
 
 tags_metadata = [
     {
-        "name": "create_instance",
-        "description": "This methode is used at first to initialize the API with at least an instance of Minio. The "
-                       "methode receives, as a body, a dictionary of Minio servers URLs and the token for "
-                       "the Prometheus metrics page."
-    },
-    {
         "name": "add_instances",
         "description": "This methode is used to add more instances of Minio to the load balancer. The "
                        "methode receives, as a body, a dictionary of Minio servers URLs and the token for "
@@ -39,6 +33,11 @@ tags_metadata = [
     {
         "name": "put_object",
         "description": "This methode allows the user to upload objects to a Minio instance based on the space available"
+                       ". This methode receives the file to be uploaded to storage, and the tags related to that file."
+    },
+    {
+        "name": "upload_object",
+        "description": "This methode allows the user to upload files to a Minio instance based on the space available"
                        ". This methode receives the file to be uploaded to storage, and the tags related to that file."
     }
 ]
@@ -147,7 +146,7 @@ async def put_object(file: Annotated[bytes, File()], file_name: Annotated[str, F
         )
 
 
-@app.put("/upload_object/", status_code=201, tags=["put_object"])
+@app.put("/upload_object/", status_code=201, tags=["upload_object"])
 async def upload_object(file: UploadFile, tags: Optional[str] = Form(None)):
     global minio_instance
     tags = json.loads(tags) if tags is not None else json.loads('{}')
