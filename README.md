@@ -1,4 +1,4 @@
-# Minio Load Balancer <img src="./images/MINIO_Bird.png" alt="Minio Logo" width="50" height="50"/>
+# Minio Load Balancer
 
 ## This is a simple REST API that takes multiple instance of Minio and load balance them, between instances that are healthy.
 
