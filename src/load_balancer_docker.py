@@ -37,7 +37,7 @@ class MinIO:
             self.aliases[instance['site']] = instance['alias']
             self.tokens[instance['site']] = instance['token']
 
-            result = os.system('mc.exe alias set minio{} {} {} {}'.format(
+            result = os.system('mc alias set minio{} {} {} {}'.format(
                 instance['alias'].split('o')[-1], instance['site'], access_key, secret_key))
 
             if result == 0:
@@ -63,7 +63,7 @@ class MinIO:
                 'access_key': base64.b64encode(site['access_key'].encode('utf-8')).decode('utf-8'),
                 'secret_key': base64.b64encode(site['secret_key'].encode('utf-8')).decode('utf-8')
             }
-            result = os.system('mc.exe alias set minio{} {} {} {}'.format(
+            result = os.system('mc alias set minio{} {} {} {}'.format(
                 self.current_index, site['url'], site['access_key'], site['secret_key']))
             if result != 0:
                 errors.append(site['url'])
@@ -92,6 +92,9 @@ class MinIO:
             if status == "success":
                 healthy[site] = alias
 
+        pool.close()
+        pool.join()
+
         return healthy
 
     def search_by_tags(self, tags: Dict[str, str]) -> List[Dict[str, List[str]]]:
@@ -103,7 +106,74 @@ class MinIO:
 
         async_results = []
         for k, v in healthy.items():
-            async_result = pool.apply_async(self.__search, ((k, v), find_tags))
+            async_result = pool.apply_async(self.__search_tags, ((k, v), find_tags))
+            async_results.append(async_result)
+
+        found = []
+        for async_result in async_results:
+            results = async_result.get()
+            if results is not None:
+                found.append(results)
+
+        pool.close()
+        pool.join()
+
+        return found
+
+    def search_by_file_extension(self, extension: str) -> List[Dict[str, List[str]]]:
+        healthy = self.__health()
+
+        find_extension = f' --name="*.{extension}" '
+
+        pool = ThreadPool(processes=10)
+
+        async_results = []
+        for k, v in healthy.items():
+            async_result = pool.apply_async(self.__search_extension, ((k, v), find_extension))
+            async_results.append(async_result)
+
+        found = []
+        for async_result in async_results:
+            results = async_result.get()
+            if results is not None:
+                found.append(results)
+
+        pool.close()
+        pool.join()
+
+        return found
+
+    def search_by_content_type(self, content_type: str) -> List[Dict[str, List[str]]]:
+        healthy = self.__health()
+
+        find_content_type = f' --metadata="content-type={content_type}" '
+
+        pool = ThreadPool(processes=10)
+
+        async_results = []
+        for k, v in healthy.items():
+            async_result = pool.apply_async(self.__search_content_type, ((k, v), find_content_type))
+            async_results.append(async_result)
+
+        found = []
+        for async_result in async_results:
+            results = async_result.get()
+            if results is not None:
+                found.append(results)
+
+        pool.close()
+        pool.join()
+
+        return found
+
+    def get_all_objects(self) -> List[Dict[str, List[str]]]:
+        healthy = self.__health()
+
+        pool = ThreadPool(processes=10)
+
+        async_results = []
+        for k, v in healthy.items():
+            async_result = pool.apply_async(self.__get_all, (k, v))
             async_results.append(async_result)
 
         found = []
@@ -198,10 +268,32 @@ class MinIO:
             return result.bucket_name + '/' + result.object_name, max_key
 
     @staticmethod
-    def __search(health: tuple, tags: Dict[str, str]) -> Dict[Any, List[str]]:
-        search_string = f'mc.exe find {health[1]} {"".join(tags)}'
+    def __search_tags(health: tuple, tags: Dict[str, str]) -> Dict[Any, List[str]] | None:
+        search_string = f'mc find {health[1]} {"".join(tags)}'
         data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
+        data = ["/".join(d.split('/')[1:]) for d in data]
         return None if len(data) == 0 else {health[0]: data}
+
+    @staticmethod
+    def __search_extension(health: tuple, extension: str) -> Dict[Any, List[str]] | None:
+        search_string = f'mc find {health[1]} {extension}'
+        data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
+        data = ["/".join(d.split('/')[1:]) for d in data]
+        return None if len(data) == 0 else {health[0]: data}
+
+    @staticmethod
+    def __search_content_type(health: tuple, content_type: str) -> Dict[Any, List[str]] | None:
+        search_string = f'mc find {health[1]} {content_type}'
+        data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
+        data = ["/".join(d.split('/')[1:]) for d in data]
+        return None if len(data) == 0 else {health[0]: data}
+
+    @staticmethod
+    def __get_all(site: str, alias: str) -> Dict[Any, List[str]] | None:
+        search_string = f'mc find {alias} '
+        data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
+        data = ["/".join(d.split('/')[1:]) for d in data]
+        return None if len(data) == 0 else {site: data}
 
     def __get_total_bytes(self, health: (str, str), file_size: int) -> Dict[str, float]:
         token = self.tokens[health[0]]
@@ -233,5 +325,5 @@ class MinIO:
     @staticmethod
     def __get_health(alias: str, site: str) -> (str, str, str):
         data = json.loads(subprocess.check_output(
-            'mc.exe ping {} --count 1 --json'.format(alias), shell=True).decode('utf-8'))
+            'mc ping {} --count 1 --json'.format(alias), shell=True).decode('utf-8'))
         return data['status'], site, alias

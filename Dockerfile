@@ -2,7 +2,7 @@ FROM python:3.9-slim-bullseye
 
 WORKDIR /app
 
-COPY . .
+COPY ./src .
 
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
 

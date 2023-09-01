@@ -9,7 +9,7 @@ from tqdm import tqdm
 from fastapi import FastAPI, status, UploadFile, Form, File
 from fastapi.responses import JSONResponse
 from load_balancer import MinIO
-from models import Servers, Tags, Instance
+from models import Servers, Tags, Instance, Extension, ContentType
 
 tags_metadata = [
     {
@@ -27,8 +27,26 @@ tags_metadata = [
     {
         "name": "search_by_tags",
         "description": "This methode allows the user the search all the Minio instances based on some specified tags. "
-                       "The methode receives a dictionary of tags with the key being the tag, and the value, the value "
-                       "of the tag."
+                       "This methode receives a dictionary, where the key is the Minio instance and the value is a list"
+                       " of the paths to the files that were found."
+    },
+    {
+        "name": "search_by_extension",
+        "description": "This methode allows the user the search all the Minio instances based on file extension. "
+                       "This methode receives a dictionary, where the key is the Minio instance and the value is a list"
+                       " of the paths to the files that were found."
+    },
+    {
+        "name": "search_by_content_type",
+        "description": "This methode allows the user the search all the Minio instances based on content type. "
+                       "This methode receives a dictionary, where the key is the Minio instance and the value is a list"
+                       " of the paths to the files that were found."
+    },
+    {
+        "name": "get_all_objects",
+        "description": "This methode allows the user to get all the objects from all instances "
+                       "This methode receives a dictionary, where the key is the Minio instance and the value is a list"
+                       " of the paths to the files that were found."
     },
     {
         "name": "put_object",
@@ -72,7 +90,7 @@ def init():
                 os.system('chmod +x $HOME/minio-binaries/mc')
 
 
-@app.post("/add_instances/", status_code=201, tags=["add_instances"])
+@app.post("/add_instances", status_code=201, tags=["add_instances"])
 async def add_instances(servers: Servers):
     if len(servers.servers) > 0:
         global minio_instance
@@ -87,13 +105,12 @@ async def add_instances(servers: Servers):
                     content=f'Error adding instances: {message}'
                 )
         else:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance '
-                                                                                  'at /create_instance/')
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='The Minio instance was not created.')
     else:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="Servers could not be empty")
 
 
-@app.post("/add_instance/", status_code=201, tags=["add_instance"])
+@app.post("/add_instance", status_code=201, tags=["add_instance"])
 async def add_instance(instance: Instance):
     if len(instance.url) > 0 and len(instance.token) > 0:
         global minio_instance
@@ -112,13 +129,12 @@ async def add_instance(instance: Instance):
                     content='Error when trying to add the instance'
                 )
         else:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance '
-                                                                                  'at /create_instance/')
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content='The Minio instance was not created.')
     else:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="Servers could not be empty")
 
 
-@app.post("/search_by_tags/", tags=["search_by_tags"])
+@app.post("/search_by_tags", status_code=200, tags=["search_by_tags"])
 async def search_by_tags(tags: Tags):
     global minio_instance
     if isinstance(minio_instance, MinIO):
@@ -126,11 +142,47 @@ async def search_by_tags(tags: Tags):
     else:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            content='First create the instance at /create_instance/'
+            content='The Minio instance was not created.'
         )
 
 
-@app.put("/put_object/", status_code=201, tags=["put_object"])
+@app.post("/search_by_extension", tags=["search_by_extension"])
+async def search_by_extension(extension: Extension):
+    global minio_instance
+    if isinstance(minio_instance, MinIO):
+        return minio_instance.search_by_file_extension(extension.extension)
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content='The Minio instance was not created.'
+        )
+
+
+@app.post("/search_by_content_type", tags=["search_by_content_type"])
+async def search_by_content_type(content_type: ContentType):
+    global minio_instance
+    if isinstance(minio_instance, MinIO):
+        return minio_instance.search_by_content_type(content_type.content_type)
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content='The Minio instance was not created.'
+        )
+
+
+@app.get("/get_all_objects", tags=["get_all_objects"])
+async def get_all_objects():
+    global minio_instance
+    if isinstance(minio_instance, MinIO):
+        return minio_instance.get_all_objects()
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content='The Minio instance was not created.'
+        )
+
+
+@app.put("/put_object", status_code=201, tags=["put_object"])
 async def put_object(file: Annotated[bytes, File()], file_name: Annotated[str, Form()],
                      tags: Optional[str] = Form(None)):
     global minio_instance
@@ -147,11 +199,11 @@ async def put_object(file: Annotated[bytes, File()], file_name: Annotated[str, F
             )
     else:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance at /create_instance/'
+            status_code=status.HTTP_401_UNAUTHORIZED, content='The Minio instance was not created.'
         )
 
 
-@app.put("/upload_object/", status_code=201, tags=["upload_object"])
+@app.put("/upload_object", status_code=201, tags=["upload_object"])
 async def upload_object(file: UploadFile, tags: Optional[str] = Form(None)):
     global minio_instance
     tags = json.loads(tags) if tags is not None else json.loads('{}')
@@ -166,7 +218,7 @@ async def upload_object(file: UploadFile, tags: Optional[str] = Form(None)):
             )
     else:
         return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED, content='First create the instance at /create_instance/'
+            status_code=status.HTTP_401_UNAUTHORIZED, content='The Minio instance was not created.'
         )
 
 

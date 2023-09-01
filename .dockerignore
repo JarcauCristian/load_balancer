@@ -5,4 +5,4 @@ mc.exe
 .idea
 __pycache__
 docker-compose.yaml
-/configs
+/src/configs

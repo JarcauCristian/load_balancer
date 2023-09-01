@@ -15,3 +15,11 @@ class Servers(BaseModel):
 
 class Tags(BaseModel):
     tags: Dict[str, str]
+
+
+class Extension(BaseModel):
+    extension: str
+
+
+class ContentType(BaseModel):
+    content_type: str
