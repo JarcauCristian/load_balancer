@@ -267,6 +267,35 @@ class MinIO:
         if result is not None:
             return result.bucket_name + '/' + result.object_name, max_key
 
+    def get_dataset(self, url: str, name: str) -> List[Dict[str, List[str]]]:
+        find_name = [f' --name="{name}" ']
+
+        result = self.__search_name((url, url.split("//")[-1].split(".")[0]), find_name)
+        if result:
+            dataset_link = self.__get_file(url.split("//")[-1].split(".")[0]+"/"+result[list(result.keys())[0]][0])
+            if dataset_link[0] == "success":
+                return dataset_link[1]
+            else:
+                return "failed"
+        else:
+            return "failed"
+    
+    def get_dataset_tags(self, url: str, name: str) -> List[Dict[str, List[str]]]:
+        dataset_link = self.__get_tags(url.split("//")[-1].split(".")[0]+"/"+name)
+        if dataset_link[0] == "success":
+            return dataset_link[1]
+        else:
+            return "failed"
+
+    
+    def get_dataset_metadata(self, url: str, name: str) -> List[Dict[str, List[str]]]:
+        dataset_link = self.__get_metadata(url.split("//")[-1].split(".")[0]+"/"+name)
+        if dataset_link[0] == "success":
+            return dataset_link[1]
+        else:
+            return "failed"
+
+
     @staticmethod
     def __search_tags(health: tuple, tags: Dict[str, str]) -> Dict[Any, List[str]] | None:
         search_string = f'mc.exe find {health[1]} {"".join(tags)}'
@@ -284,6 +313,13 @@ class MinIO:
     @staticmethod
     def __search_content_type(health: tuple, content_type: str) -> Dict[Any, List[str]] | None:
         search_string = f'mc.exe find {health[1]} {content_type}'
+        data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
+        data = ["/".join(d.split('/')[1:]) for d in data]
+        return None if len(data) == 0 else {health[0]: data}
+    
+    @staticmethod
+    def __search_name(health: tuple, dataset_name: str) -> Dict[Any, List[str]] | None:
+        search_string = f'mc.exe find {health[1]} {"".join(dataset_name)}'
         data = subprocess.check_output(search_string, shell=True).decode('utf-8').split('\n')[:-1]
         data = ["/".join(d.split('/')[1:]) for d in data]
         return None if len(data) == 0 else {health[0]: data}
@@ -327,3 +363,27 @@ class MinIO:
         data = json.loads(subprocess.check_output(
             'mc.exe ping {} --count 1 --json'.format(alias), shell=True).decode('utf-8'))
         return data['status'], site, alias
+    
+    @staticmethod
+    def __get_file(dataset_path: str) -> (str, str):
+        data = json.loads(subprocess.check_output(
+            'mc.exe share download --expire=10m {} --json'.format(dataset_path), shell=True).decode('utf-8'))
+            
+        return data['status'], data["share"]
+    
+    @staticmethod
+    def __get_tags(dataset_path: str) -> (str, str):
+        data = json.loads(subprocess.check_output(
+            'mc.exe tag list {} --json'.format(dataset_path), shell=True).decode('utf-8'))
+        
+        try:
+            return data['status'], data["tagset"]
+        except:
+            return data['status']
+    
+    @staticmethod
+    def __get_metadata(dataset_path: str) -> (str, str):
+        data = json.loads(subprocess.check_output(
+            'mc.exe stat {} --json'.format(dataset_path), shell=True).decode('utf-8'))
+        
+        return data['status'], data["metadata"]
