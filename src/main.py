@@ -8,8 +8,9 @@ import uvicorn
 from tqdm import tqdm
 from fastapi import FastAPI, status, UploadFile, Form, File
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from load_balancer import MinIO
-from models import Servers, Tags, Instance, Extension, ContentType
+from models import Servers, Tags, Instance, Extension, ContentType, DatasetSearcher, Dataset, Metadata
 
 tags_metadata = [
     {
@@ -57,10 +58,35 @@ tags_metadata = [
         "name": "upload_object",
         "description": "This methode allows the user to upload files to a Minio instance based on the space available"
                        ". This methode receives the file to be uploaded to storage, and the tags related to that file."
+    },
+     {
+        "name": "get_dataset",
+        "description": "This methode allows the user to get a shared link to download the required file."
+                       ". This methode receives the db client url and the dataset name."
+    },
+    {
+        "name": "get_all_objects_with_details",
+        "description": "This methode allows the user to get all the datasets and their corresponding metadata and tags."
+                       ". This methode doesn't receive any data."
     }
 ]
 
 app = FastAPI(openapi_tags=tags_metadata)
+
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:3001",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 minio_instance = None
 
@@ -181,6 +207,68 @@ async def get_all_objects():
             content='The Minio instance was not created.'
         )
 
+@app.get("/get_all_objects_with_details", tags=["get_all_objects_with_details"])
+async def get_all_objects():
+    global minio_instance
+    if isinstance(minio_instance, MinIO):
+        datasets_with_details = []
+        datasets = minio_instance.get_all_objects()
+        for entry in datasets:
+            for key in entry:
+                for dataset in entry[key]:
+                    if "/" in dataset:
+                        if "jsonld" in dataset.lower():
+                            metadata = minio_instance.get_dataset_metadata(key, dataset)
+                            tags     = minio_instance.get_dataset_tags(key, dataset)
+                            if metadata != "failed" and tags != "failed":
+                                dataset_with_details = {
+                                    "name": dataset.split("/")[-1],
+                                    "metadata": {
+                                        "MetaAccess": metadata[
+                                            'X-Amz-Meta-Access'] if 'X-Amz-Meta-Access' in metadata else None,
+                                        "MetaDownload": metadata[
+                                            'X-Amz-Meta-Download'] if 'X-Amz-Meta-Download' in metadata else None,
+                                        "MetaUploadDate": metadata[
+                                            'X-Amz-Meta-Uploaddate'] if 'X-Amz-Meta-Uploaddate' in metadata else None,
+                                        "MetaTagCount":metadata[
+                                        'X-Amz-Tagging-Count'] if 'X-Amz-Tagging-Count' in metadata else None,
+                                        "Source": key
+                                    },
+                                    "tags": tags
+                                }
+                                datasets_with_details.append(dataset_with_details)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=datasets_with_details
+        )
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content='The Minio instance was not created.'
+        )
+
+
+@app.post("/get_dataset", tags=["get_dataset"])
+async def get_dataset(dataset_searcher: DatasetSearcher):
+    global minio_instance
+    if isinstance(minio_instance, MinIO):
+        dataset_link = minio_instance.get_dataset(dataset_searcher.url, dataset_searcher.name)
+        if dataset_link == "failed":
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content='The dataset was not found.'
+            )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"dataset": dataset_link}
+            )
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content='First create the dataset at /put_object/'
+        )
+
 
 @app.put("/put_object", status_code=201, tags=["put_object"])
 async def put_object(file: Annotated[bytes, File()], file_name: Annotated[str, Form()],
@@ -227,4 +315,4 @@ if __name__ == '__main__':
 
     minio_instance = MinIO()
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
