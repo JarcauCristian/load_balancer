@@ -23,3 +23,20 @@ class Extension(BaseModel):
 
 class ContentType(BaseModel):
     content_type: str
+
+class DatasetSearcher(BaseModel):
+    url: str
+    name: str
+
+
+class Dataset(BaseModel):
+    name: str
+    tags: dict | None = {}
+    metadata: dict | None = {}
+
+
+class Metadata(BaseModel):
+    MetaAccess: str | None = ""
+    MetaDownload: str | None = ""
+    MetaUploadDate: str | None = ""
+    MetaTagCount: str | None =
